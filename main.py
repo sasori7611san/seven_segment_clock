@@ -13,7 +13,9 @@ CANVAS_WIDTH_COLON = 50
 
 # 色の設定
 COLOR_BG = "black"  # 時計の背景色
-COLOR_SEG_ON = "orange"  # セグ点灯時の色
+# COLOR_SEG_ON = "orange"  # セグ点灯時の色
+# COLOR_SEG_OFF = "gray20"  # セグ消灯時の色
+COLOR_SEG_ON = "green"  # セグ点灯時の色
 COLOR_SEG_OFF = "gray20"  # セグ消灯時の色
 
 
