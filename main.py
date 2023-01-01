@@ -1,37 +1,156 @@
 # -*- coding:utf-8 -*-
 import tkinter
-import math
 from datetime import datetime, timedelta, timezone
 
-# キャンバスのサイズの設定
-CANVAS_WIDTH = 400
-CANVAS_HEIGHT = CANVAS_WIDTH
-CANVAS_SIZE = CANVAS_WIDTH
+# セグの太さ
+SEG_WIDTH = 20
 
-# 針の長さの設定
-LENGTH_HOUR_HAND = CANVAS_SIZE / 2 * 0.6
-LENGTH_MINUTE_HAND = CANVAS_SIZE / 2 * 0.7
-LENGTH_SECOND_HAND = CANVAS_SIZE / 2 * 0.8
+# 数字表示用のキャンバスのサイズの設定
+CANVAS_WIDTH_NUMBER = 100
 
-# 針の色の設定
-COLOR_HOUR_HAND = "red"
-COLOR_MINUTE_HAND = "blue"
-COLOR_SECOND_HAND = "green"
+# コロン表示用のキャンバスのサイズ
+CANVAS_WIDTH_COLON = 50
 
-# 針の太さの設定
-WIDTH_HOUR_HAND = 6
-WIDTH_MINUTE_HAND = 4
-WIDTH_SECOND_HAND = 2
+# 色の設定
+COLOR_BG = "black"  # 時計の背景色
+COLOR_SEG_ON = "orange"  # セグ点灯時の色
+COLOR_SEG_OFF = "gray20"  # セグ消灯時の色
 
-# 時計の前面と背景の色の設定
-BG_COLOR = "white"
-FG_COLOR = "gray"
 
-# 時計の盤面を表す円の半径の設定
-CLOCK_OVAL_RADIUS = CANVAS_SIZE / 2
+class ColonCanvas(tkinter.Canvas):
+    '''コロンを表現する図形を描画するキャンバス'''
 
-# 時計の数字の位置の設定（中心からの距離）
-DISTANCE_NUMBER = CANVAS_SIZE / 2 * 0.9
+    canvas_width = CANVAS_WIDTH_COLON
+    canvas_height = CANVAS_WIDTH_NUMBER * 2 - SEG_WIDTH
+
+    def __init__(self, master, **kw):
+        super().__init__(master, kw)
+
+    def draw(self):
+        '''コロンを長方形として描画する'''
+        for i in range(2):
+            # 横方向の中心はキャンバスの中心
+            center_x = ColonCanvas.canvas_width / 2
+            # 縦方向の中心はキャンバスの1/3 or 2/3の位置
+            center_y = (i + 1) * ColonCanvas.canvas_height / 3
+            # 長方形の各辺の長さが20となるように座標を設定
+            x1 = center_x - 10
+            y1 = center_y - 10
+            x2 = center_x + 10
+            y2 = center_y + 10
+
+            # 長方形を描画
+            self.create_rectangle(
+                x1, y1, x2, y2,
+                fill=COLOR_SEG_ON,
+                width=0
+            )
+
+
+class NumberCanvas(tkinter.Canvas):
+    '''数字を表現するセグを描画するキャンバス'''
+    # 各種パラメータの設定
+    canvas_width = CANVAS_WIDTH_NUMBER
+    seg_width = SEG_WIDTH
+    canvas_height = canvas_width * 2 - seg_width
+    seg_length = canvas_width - seg_width
+
+    # 数字をセグ表示する際の、各セグの点灯or消灯の情報のリスト
+    ON_OFF_INFOS = [
+        # 上、上左、上右、中、下左、下右、下
+        [True, True, True, False, True, True, True],  # 0
+        [False, False, True, False, False, True, False],  # 1
+        [True, False, True, True, True, False, True],  # 2
+        [True, False, True, True, False, True, True],  # 3
+        [False, True, True, True, False, True, False],  # 4
+        [True, True, False, True, False, True, True],  # 5
+        [True, True, False, True, True, True, True],  # 6
+        [True, True, True, False, False, True, False],  # 7
+        [True, True, True, True, True, True, True],  # 8
+        [True, True, True, True, False, True, True],  # 9
+    ]
+
+    # 各セグを描画する時の情報のリスト
+    SEG_DRAW_PARAMS = [
+        # [回転するか？,横方向の移動量,縦方向の移動量]
+        [False, canvas_width / 2, seg_width / 2],
+        [True, seg_width / 2, canvas_height / 2 - seg_length / 2],
+        [True, canvas_width - seg_width / 2, canvas_height / 2 - seg_length / 2],
+        [False, canvas_width / 2, canvas_height / 2],
+        [True, seg_width / 2, canvas_height / 2 + seg_length / 2],
+        [True, canvas_width - seg_width / 2, canvas_height / 2 + seg_length / 2],
+        [False, canvas_width / 2, canvas_height - seg_width / 2]
+    ]
+
+    # 基準セグの各頂点のx座標
+    XS = [
+        - canvas_width / 2 + seg_width,  # 左上
+        - canvas_width / 2 + seg_width / 2,  # 左中
+        - canvas_width / 2 + seg_width,  # 左下
+        canvas_width / 2 - seg_width,  # 右下
+        canvas_width / 2 - seg_width / 2,  # 右中
+        canvas_width / 2 - seg_width  # 右上
+    ]
+    # 基準セグの各頂点のy座標
+    YS = [
+        - seg_width / 2,  # 左上
+        0,  # 左中
+        seg_width / 2,  # 左下
+        seg_width / 2,  # 右下
+        0,  # 右中
+        - seg_width / 2  # 右上
+    ]
+
+    def __init__(self, master, **kw):
+        super().__init__(master, kw)
+        # 描画した六角形のIDを管理するリスト
+        self.segs = []
+
+    def draw(self):
+        '''セグを描画する'''
+        # 描画時のパラメータに従ってセグを描画
+        for draw_param in NumberCanvas.SEG_DRAW_PARAMS:
+            is_rotate, x_shift, y_shift = draw_param
+
+            if is_rotate:
+                # 回転必要な場合は、基準セグの頂点の座標を90度回転
+                r_xs = [-n for n in NumberCanvas.YS]
+                r_ys = [n for n in NumberCanvas.XS]
+            else:
+                # 回転不要な場合は、基準セグの頂点の座標をそのまま使用
+                r_xs = NumberCanvas.XS
+                r_ys = NumberCanvas.YS
+            # 基準セグの各頂点を移動
+            t_xs = [n + x_shift for n in r_xs]
+            t_ys = [n + y_shift for n in r_ys]
+
+            # 移動後の座標に六角形を描画
+            seg = self.create_polygon(
+                t_xs[0], t_ys[0],
+                t_xs[1], t_ys[1],
+                t_xs[2], t_ys[2],
+                t_xs[3], t_ys[3],
+                t_xs[4], t_ys[4],
+                t_xs[5], t_ys[5],
+                fill=COLOR_SEG_OFF,
+                width=0
+            )
+
+            # 描画した六角形のIDをリストに格納
+            self.segs.append(seg)
+
+    def update(self, num):
+        '''数字numをセグ表示する'''
+        for seg, is_on in zip(self.segs, NumberCanvas.ON_OFF_INFOS[num]):
+            if is_on:
+                # 点灯する場合のセグの色
+                color = COLOR_SEG_ON
+            else:
+                # 消灯する場合のセグの色
+                color = COLOR_SEG_OFF
+
+            # セグを表現する多角形の色を変更
+            self.itemconfig(seg, fill=color)
 
 
 class Timer:
@@ -51,6 +170,9 @@ class Timer:
 class Drawer:
     '''時計を描画するクラス'''
 
+    CANVAS_NUMBER = 1
+    CANVAS_COLON = 2
+
     def __init__(self, master):
         # 各種設定を行った後に時計の盤面を描画
         self.initSetting(master)
@@ -61,119 +183,77 @@ class Drawer:
         # ウィジェットの作成先を設定
         self.master = master
 
-        # 描画した針のオブジェクトを覚えておくリストを用意
-        self.hands = []
+        # 作成するキャンバスの種類
+        self.canvas_types = [
+            Drawer.CANVAS_NUMBER,
+            Drawer.CANVAS_NUMBER,
+            Drawer.CANVAS_COLON,
+            Drawer.CANVAS_NUMBER,
+            Drawer.CANVAS_NUMBER,
+            Drawer.CANVAS_COLON,
+            Drawer.CANVAS_NUMBER,
+            Drawer.CANVAS_NUMBER
+        ]
 
-        # 針の色のリストを用意
-        self.colors = [COLOR_HOUR_HAND, COLOR_MINUTE_HAND, COLOR_SECOND_HAND]
-
-        # 針の太さのリストを用意
-        self.widths = [WIDTH_HOUR_HAND, WIDTH_MINUTE_HAND, WIDTH_SECOND_HAND]
-
-        # 針の長さのリストを用意
-        self.lengths = [LENGTH_HOUR_HAND,
-                        LENGTH_MINUTE_HAND, LENGTH_SECOND_HAND]
-
-        # キャンバスの中心座標を覚えておく
-        self.center_x = CANVAS_WIDTH / 2
-        self.center_y = CANVAS_HEIGHT / 2
+        self.number_canvases = []
+        self.colon_canvases = []
 
     def createClock(self):
         '''時計の盤面を作成する'''
-        # キャンバスを作成して配置する
-        self.canvas = tkinter.Canvas(
-            self.master,
-            width=CANVAS_WIDTH,
-            height=CANVAS_HEIGHT,
-            highlightthickness=0
-        )
-        self.canvas.pack()
+        # 数字のセグ表示用のキャンバスとコロン表示用のキャンバスを作成
+        for canvas_type in self.canvas_types:
+            if canvas_type == Drawer.CANVAS_NUMBER:
+                # 数字のセグ表示用のキャンバスを作成
+                canvas = NumberCanvas(
+                    self.master,
+                    width=NumberCanvas.canvas_width,
+                    height=NumberCanvas.canvas_height,
+                    bg=COLOR_BG,
+                    highlightthickness=0,
+                )
+                self.number_canvases.append(canvas)
+            else:
+                # コロン表示用のキャンバスを作成
+                canvas = ColonCanvas(
+                    self.master,
+                    width=ColonCanvas.canvas_width,
+                    height=ColonCanvas.canvas_height,
+                    bg=COLOR_BG,
+                    highlightthickness=0,
+                )
+                self.colon_canvases.append(canvas)
 
-        # 時計の盤面を表す円を描画する
-        x1 = self.center_x - CLOCK_OVAL_RADIUS
-        y1 = self.center_y - CLOCK_OVAL_RADIUS
-        x2 = self.center_x + CLOCK_OVAL_RADIUS
-        y2 = self.center_y + CLOCK_OVAL_RADIUS
+            # 左から順番にpackで詰めていく
+            canvas.pack(side=tkinter.LEFT, padx=10, pady=10)
 
-        self.canvas.create_oval(
-            x1, y1, x2, y2,
-            fill=BG_COLOR,
-            width=2,
-            outline=FG_COLOR
-        )
+    def draw(self):
+        '''各キャンバスに描画する'''
+        for canvas in self.colon_canvases:
+            # コロンを描画するような依頼
+            canvas.draw()
 
-        # 時計の盤面上に数字を描画する
-        for hour in range(1, 13):
-            # 角度を計算
-            angle = hour * 360 / 12 - 90
-            # 描画位置を計算
-            x1 = self.center_x
-            y1 = self.center_x
-            dx = DISTANCE_NUMBER * math.cos(math.radians(angle))
-            dy = DISTANCE_NUMBER * math.sin(math.radians(angle))
-            x2 = x1 + dx
-            y2 = y1 + dy
+        for canvas in self.number_canvases:
+            # セグを描画するよう依頼
+            canvas.draw()
 
-            self.canvas.create_text(
-                x2, y2,
-                font=("", 20),
-                fill=FG_COLOR,
-                text=str(hour)
-            )
+    def update(self, hour, minute, second):
+        '''セグ表示を更新する'''
+        # 時刻を1桁ずつに分割する
+        nums = []
+        nums.append(hour // 10)
+        nums.append(hour % 10)
+        nums.append(minute // 10)
+        nums.append(minute % 10)
+        nums.append(second // 10)
+        nums.append(second % 10)
 
-    def drawHands(self, hour, minute, second):
-        '''針を表現する線を描画する'''
-        # 各線の傾きの角度を計算指定リストに追加
-        angles = []
-        angles.append(hour * 360 / 12 - 90)
-        angles.append(minute * 360 / 60 - 90)
-        angles.append(second * 360 / 60 - 90)
-
-        # 線の一方の座標をキャンバスの中心とする
-        x1 = self.center_x
-        y1 = self.center_y
-
-        # initSettingで作成したリストから情報を取得しながら線を描画
-        for angle, length, width, color in zip(angles, self.lengths, self.widths, self.colors):
-            # 線の他方の座標を計算
-            x2 = x1 + length * math.cos(math.radians(angle))
-            y2 = y1 + length * math.sin(math.radians(angle))
-
-            hand = self.canvas.create_line(
-                x1, y1, x2, y2,
-                fill=color,
-                width=width
-            )
-            # 描画した線のIDを覚えておく
-            self.hands.append(hand)
-
-    def updateHands(self, hour, minute, second):
-        '''針を表現する線の位置を更新する'''
-
-        angles = []
-        angles.append(hour * 360 / 12 - 90)
-        angles.append(minute * 360 / 60 - 90)
-        angles.append(second * 360 / 60 - 90)
-
-        # 線一方の点の座標は常に時計の中心
-        x1 = self.center_x
-        y1 = self.center_y
-
-        # handは描画した線のID
-        for hand, angle, length in zip(self.hands, angles, self.lengths):
-            # 線の他方の点の座標は毎回時刻に合わせて計算する
-            x2 = x1 + length * math.cos(math.radians(angle))
-            y2 = y1 + length * math.sin(math.radians(angle))
-
-            # coordsメソッドにより描画済みの線の座標を変更する
-            hand = self.canvas.coords(
-                hand,
-                x1, y1, x2, y2
-            )
+        for canvas, num in zip(self.number_canvases, nums):
+            # 各キャンバスに対応する数字numをセグ表示するように依頼
+            canvas.update(num)
 
 
-class AnalogClock:
-    '''アナログ時計を実現するクラス'''
+class DigitalClock:
+    '''デジタル時計を実現するクラス'''
 
     def __init__(self, master):
         # after実行用にウィジェットのインスタンスを保持
@@ -183,29 +263,30 @@ class AnalogClock:
         self.timer = Timer()
         self.drawer = Drawer(master)
 
-        # 針を描画
+        # コロンとセグを描画する
         self.draw()
 
-        # 1秒後に針を進めるループを開始
-        self.master.after(1000, self.update)
+        # 時刻をセグ表示する
+        self.update()
 
     def draw(self):
-        '''時計の針を描画する'''
-        # 時刻を取得し、その時刻に合わせて針を進める
-        hour, minute, second = self.timer.time()
-        self.drawer.drawHands(hour, minute, second)
+        '''コロンとセグを描画する'''
+        self.drawer.draw()
 
     def update(self):
-        '''時計の針を進める'''
-        # 時刻を取得し、その時刻に合わせて針を進める
+        '''時刻をセグ表示を更新する'''
+        # 時刻を取得し、その時刻に合わせて表示を進める
         hour, minute, second = self.timer.time()
-        self.drawer.updateHands(hour, minute, second)
+        self.drawer.update(hour, minute, second)
 
-        # 1秒後に再度時計の針を進める
+        # 1秒後に再度セグ表示を行う
         self.master.after(1000, self.update)
 
 
 if __name__ == "__main__":
     app = tkinter.Tk()
-    AnalogClock(app)
+
+    # 背景色を設定
+    app.config(bg=COLOR_BG)
+    DigitalClock(app)
     app.mainloop()
